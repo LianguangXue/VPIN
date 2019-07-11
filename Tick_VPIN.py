@@ -34,8 +34,7 @@ def get_average_volume(data_before, bars_per_bucket = 30,buckets_per_day=1836):
     volume_per_bar = int(cumulative_volume/total_bars)
     return total_bars,days_num,volume_per_bar
 
-#get norminal price of each bar(we use the mean price of the bar  as the paper refered)
-#define a function to construct bars
+
 #get norminal price of each bar(we use the mean price of the bar  as the paper refered)
 #define a function to construct bars
 def construct_bars(data,volume_per_bar):
@@ -144,7 +143,9 @@ def normal_transformation(vpin_list):
     std_vpin = np.std(vpin_list)
     vpin_norm_list = 1/2*(1+erf_vector((vpin_list-mean_vpin)/(np.sqrt(2)*std_vpin)))
     return vpin_norm_list
-
+	
+	
+#combine all the functions to caculate history vpin
 def vpin_combine(data,bars_per_bucket = 30,buckets_per_day=1836,support_window=0.0478):
     data_today,data_before = data_preprocessing(data)
     total_bars,days_num,volume_per_bar = get_average_volume(data_before,bars_per_bucket = bars_per_bucket,
@@ -161,7 +162,7 @@ def vpin_combine(data,bars_per_bucket = 30,buckets_per_day=1836,support_window=0
                                                                         support_window=support_window)
     vpin_norm_list = normal_transformation(vpin_list)
     bucket_price = data.price.values[cut_point_bucket_list]
-    return time_bucket_list,bucket_price,vpin_norm_list,high_list,low_list,time_list,price_list,diff_list, bar_remain,bucket_remain,std_price,volume_per_bar
+    return time_bucket_list,bucket_price,vpin_list,vpin_norm_list,high_list,low_list,time_list,price_list,diff_list, bar_remain,bucket_remain,std_price,volume_per_bar
 
 #define a function to detect the VPIN even t
 def VPIN_event_detect(vpin_norm_list,time_bucket_list,CDF_threshold=0.99):
@@ -247,6 +248,11 @@ def constuct_buckets_update(temp,temp_buy,temp_sell,volume_buy_bar_list ,volume_
     bucket_remain = [temp,temp_buy,temp_sell]
     return diff_list ,time_bucket_list,cut_point_bucket_list,bucket_remain
 
+def normal_transformation_update(vpin_list,mean_vpin,std_vpin):
+    erf_vector= np.vectorize(erf)
+    vpin_norm_list = 1/2*(1+erf_vector((vpin_list-mean_vpin)/(np.sqrt(2)*std_vpin)))
+    return vpin_norm_list
+
 
 # define a fucntion to update vpin list
 def vpin_caculation_update(old_diff_list, new_diff_list, volume_per_bar, bars_per_bucket=30, buckets_per_day=1836,
@@ -266,6 +272,7 @@ def vpin_caculation_update(old_diff_list, new_diff_list, volume_per_bar, bars_pe
 def vpin_tick_caculation_update(new_data,
                                 time_bucket_list,
                                 bucket_price,
+                                vpin_list,
                                 vpin_norm_list,
                                 high_list,
                                 low_list,
@@ -302,18 +309,25 @@ def vpin_tick_caculation_update(new_data,
                                                                                               new_time_list,new_cut_point_list,
                                                                                               bars_per_bucket = 30)
     time_bucket_list += new_time_bucket_list
-    vpin_list = vpin_caculation_update(diff_list,new_diff_list,volume_per_bar,bars_per_bucket = 30,
+    new_vpin_list = vpin_caculation_update(diff_list,new_diff_list,volume_per_bar,bars_per_bucket = 30,
                                        buckets_per_day=1836,support_window=0.0478)
+    
+    print('new vpin list:',new_vpin_list)
     diff_list += new_diff_list
-    new_vpin_norm_list = normal_transformation(vpin_list)
+    vpin_list += new_vpin_list
+    
+    mean_vpin = np.mean(vpin_list)
+    std_vpin = np.std(vpin_list)
+    new_vpin_norm_list = normal_transformation_update(new_vpin_list,mean_vpin,std_vpin)
+    
     vpin_norm_list = list(vpin_norm_list)
     vpin_norm_list += list(new_vpin_norm_list)
     new_bucket_price = new_data.price.values[new_cut_point_bucket_list]
     bucket_price = list(bucket_price)
     bucket_price += list(new_bucket_price)
-    print(new_vpin_norm_list)
-    print(new_time_bucket_list)
+    #print(new_vpin_norm_list)
+    #print(new_time_bucket_list)
     return new_time_bucket_list,new_bucket_price,new_vpin_norm_list,high_list,low_list,time_list,time_bucket_list,\
-           bucket_price,vpin_norm_list,bar_remain,bucket_remain,std_price,volume_per_bar
+           bucket_price,vpin_list,vpin_norm_list,bar_remain,bucket_remain,std_price,volume_per_bar
 
 
